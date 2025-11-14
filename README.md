@@ -1,5 +1,6 @@
 A simple yet essential sequential logic building block: a Toggle Flip-Flop that toggles its output on each rising clock edge only when enabled. Useful in frequency dividers, counters, and state-transition circuits.
 This repository also includes a SystemVerilog testbench with interface, driver, generator, monitor, and scoreboard—providing a structured verification environment.
+
 📌 Features
 🔹 RTL Design
 
@@ -28,6 +29,7 @@ project Structure
 ├── tb_toggle_ff.sv        // Complete SV Testbench
 ├── dump.vcd               // Generated waveform (after simulation)
 └── README.md              // Documentation
+
 🧪 Testbench Overview
 
 The testbench uses a verification environment including:
