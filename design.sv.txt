@@ -1,0 +1,19 @@
+//==============================================================
+// DESIGN : Toggle Flip-Flop (SystemVerilog)
+//==============================================================
+module toggle_ff(
+    input  logic clk,        // Clock input
+    input  logic reset_n,    // Active-low reset
+    input  logic enable,     // Toggle control signal
+    output logic q           // Output
+);
+
+    always_ff @(posedge clk or negedge reset_n) begin
+        if (!reset_n)
+            q <= 0;          // Reset output to 0
+        else if (enable)
+            q <= ~q;         // Toggle only when enabled
+        // else output holds its value
+    end
+
+endmodule

@@ -1,0 +1,180 @@
+//==============================================================
+// TIMESCALE
+//==============================================================
+`timescale 1ns/1ps
+
+//==============================================================
+// INTERFACE
+//==============================================================
+interface toggle_if(input bit clk);
+  logic reset_n;
+  logic enable;
+  logic q;
+
+  modport dut_mp (input clk, reset_n, enable, output q);
+  modport tb_mp  (input clk, output reset_n, enable, input q);
+endinterface
+
+//==============================================================
+// GENERATOR
+//==============================================================
+class generator;
+  rand bit enable;
+  int count = 20;
+
+  mailbox gen2drv;
+
+  function new(mailbox m);
+    gen2drv = m;
+  endfunction
+
+  task run();
+    repeat(count) begin
+      assert(this.randomize());
+      gen2drv.put(enable);
+      #10;
+    end
+  endtask
+endclass
+
+//==============================================================
+// DRIVER
+//==============================================================
+class driver;
+  virtual toggle_if.tb_mp vif;
+  mailbox gen2drv;
+
+  function new(virtual toggle_if.tb_mp vif, mailbox m);
+    this.vif = vif;
+    this.gen2drv = m;
+  endfunction
+
+  task run();
+    bit en;
+    forever begin
+      gen2drv.get(en);
+      vif.enable = en;
+      #10;
+    end
+  endtask
+endclass
+
+//==============================================================
+// MONITOR
+//==============================================================
+class monitor;
+  virtual toggle_if.tb_mp vif;
+  mailbox mon2scb;
+
+  function new(virtual toggle_if.tb_mp vif, mailbox m);
+    this.vif = vif;
+    mon2scb = m;
+  endfunction
+
+  task run();
+    forever begin
+      @(posedge vif.clk);
+      mon2scb.put({vif.enable, vif.q});
+    end
+  endtask
+endclass
+
+//==============================================================
+// SCOREBOARD
+//==============================================================
+class scoreboard;
+  mailbox mon2scb;
+  bit expected_q = 0;
+
+  function new(mailbox m);
+    mon2scb = m;
+  endfunction
+
+  task run();
+    bit enable, q;
+    forever begin
+      mon2scb.get({enable, q});
+
+      if (enable)
+        expected_q = ~expected_q;  // expected toggle
+
+      if (q !== expected_q)
+        $display("[ERROR] Expected=%0b Got=%0b @%0t", expected_q, q, $time);
+      else
+        $display("[OK] enable=%0b q=%0b @%0t", enable, q, $time);
+
+    end
+  endtask
+endclass
+
+//==============================================================
+// ENVIRONMENT
+//==============================================================
+class env;
+  generator gen;
+  driver drv;
+  monitor mon;
+  scoreboard scb;
+
+  mailbox gen2drv = new();
+  mailbox mon2scb = new();
+
+  virtual toggle_if.tb_mp vif;
+
+  function new(virtual toggle_if.tb_mp vif);
+    this.vif = vif;
+    gen = new(gen2drv);
+    drv = new(vif, gen2drv);
+    mon = new(vif, mon2scb);
+    scb = new(mon2scb);
+  endfunction
+
+  task run();
+    fork
+      gen.run();
+      drv.run();
+      mon.run();
+      scb.run();
+    join_any
+  endtask
+endclass
+
+//==============================================================
+// TOP TESTBENCH
+//==============================================================
+module tb;
+
+  bit clk = 0;
+  always #5 clk = ~clk;  // 100 MHz clock
+
+  toggle_if tif(clk);
+
+  env e;
+
+  // DUT Instance
+  toggle_ff dut(
+    .clk(clk),
+    .reset_n(tif.reset_n),
+    .enable(tif.enable),
+    .q(tif.q)
+  );
+
+  initial begin
+    // Enable waveform dump
+    $dumpfile("dump.vcd");
+    $dumpvars(0, tb);
+
+    // Reset
+    tif.reset_n = 0;
+    tif.enable  = 0;
+    #20;
+    tif.reset_n = 1;
+
+    // Start environment
+    e = new(tif.tb_mp);
+    e.run();
+
+    #300 $finish;
+  end
+
+endmodule
